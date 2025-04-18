@@ -1,0 +1,13 @@
+#vei-progress-bar {
+    background: #eee;
+    height: 20px;
+    margin-top: 10px;
+    border: 1px solid #ccc;
+    width: 100%;
+}
+#vei-progress-bar div {
+    height: 100%;
+    width: 0%;
+    background: #2271b1;
+    transition: width 0.3s;
+}
