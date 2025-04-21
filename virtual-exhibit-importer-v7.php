@@ -143,6 +143,31 @@ function vei_ajax_start_import() {
                 'error' => $new_post->get_error_message()
             ]);
         }
+        if (!has_post_thumbnail($new_post) && !empty($post->_links->{'wp:featuredmedia'}[0]->href)) {
+            $media_link = esc_url_raw($post->_links->{'wp:featuredmedia'}[0]->href);
+            $media_response = wp_remote_get($media_link);
+            if (!is_wp_error($media_response)) {
+                $media_body = wp_remote_retrieve_body($media_response);
+                $media_obj = json_decode($media_body);
+                if (!empty($media_obj->source_url)) {
+                    $image_url = esc_url_raw($media_obj->source_url);
+                    $tmp = download_url($image_url);
+                    if (!is_wp_error($tmp)) {
+                        require_once(ABSPATH . 'wp-admin/includes/image.php');
+                        require_once(ABSPATH . 'wp-admin/includes/file.php');
+                        require_once(ABSPATH . 'wp-admin/includes/media.php');
+                        $file_array = [
+                            'name'     => basename($image_url),
+                            'tmp_name' => $tmp
+                        ];
+                        $id = media_handle_sideload($file_array, $new_post);
+                        if (!is_wp_error($id)) {
+                            set_post_thumbnail($new_post, $id);
+                        }
+                    }
+                }
+            }
+        }
 
         wp_send_json_success([
             'message' => ($force ? "Force updated post: $title" : "Imported post: $title"),
