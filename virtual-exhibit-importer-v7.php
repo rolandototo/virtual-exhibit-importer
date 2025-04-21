@@ -100,6 +100,7 @@ function vei_ajax_start_import() {
         $title = sanitize_text_field($post->title->rendered);
         $content = wp_kses_post($post->content->rendered);
         $slug = sanitize_title($title);
+        $excerpt = wp_kses_post($post->excerpt->rendered);
 
         $existing_query = new WP_Query([
             'post_type' => 'virtual_exhibit',
@@ -120,7 +121,8 @@ function vei_ajax_start_import() {
             wp_update_post([
                 'ID' => $existing->ID,
                 'post_title' => $title,
-                'post_content' => $content
+                'post_content' => $content,
+                'post_excerpt' => $excerpt,
             ]);
             $new_post = $existing->ID;
         } else {
@@ -131,6 +133,7 @@ function vei_ajax_start_import() {
                 'post_type' => 'virtual_exhibit',
                 'post_title' => $title,
                 'post_content' => $content,
+                'post_excerpt' => $excerpt,
                 'post_status' => 'publish',
                 'post_name' => $slug,
                 'meta_input' => ['original_id' => $original_id]
