@@ -3,7 +3,7 @@
  * Plugin Name: Virtual Exhibit Importer v7
  * Description: Imports Virtual Exhibits from external API with AJAX, progress bar, and error reporting.
  * Version: 7.0
- * Author: Rolando Escobar & ChatGPT
+ * Author: Counterintuity/Rolando Escobar
  */
 
 if (!defined('ABSPATH')) exit;
