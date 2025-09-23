@@ -97,6 +97,7 @@ function vei_ajax_start_import() {
 
         $post = $posts[0];
         $original_id = intval($post->id);
+        $original_url = !empty($post->link) ? esc_url_raw($post->link) : '';
         $title = sanitize_text_field($post->title->rendered);
         $content = wp_kses_post($post->content->rendered);
         $slug = sanitize_title($title);
@@ -110,6 +111,12 @@ function vei_ajax_start_import() {
         ]);
         $existing = $existing_query->have_posts() ? $existing_query->posts[0] : null;
         if ($existing && !$force) {
+            if ($original_url) {
+                $current_url = get_post_meta($existing->ID, 'original_url', true);
+                if ($current_url !== $original_url) {
+                    update_post_meta($existing->ID, 'original_url', $original_url);
+                }
+            }
             wp_send_json_success([
                 'message' => "Post already exists: $title",
                 'imported' => false,
@@ -124,19 +131,27 @@ function vei_ajax_start_import() {
                 'post_content' => $content,
                 'post_excerpt' => $excerpt,
             ]);
+            if ($original_url) {
+                update_post_meta($existing->ID, 'original_url', $original_url);
+            }
             $new_post = $existing->ID;
         } else {
             require_once(ABSPATH . 'wp-admin/includes/image.php');
-        require_once(ABSPATH . 'wp-admin/includes/file.php');
-        require_once(ABSPATH . 'wp-admin/includes/media.php');
-        $new_post = wp_insert_post([
+            require_once(ABSPATH . 'wp-admin/includes/file.php');
+            require_once(ABSPATH . 'wp-admin/includes/media.php');
+            $meta_input = ['original_id' => $original_id];
+            if ($original_url) {
+                $meta_input['original_url'] = $original_url;
+            }
+
+            $new_post = wp_insert_post([
                 'post_type' => 'virtual_exhibit',
                 'post_title' => $title,
                 'post_content' => $content,
                 'post_excerpt' => $excerpt,
                 'post_status' => 'publish',
                 'post_name' => $slug,
-                'meta_input' => ['original_id' => $original_id]
+                'meta_input' => $meta_input
             ]);
         }
 
@@ -197,3 +212,29 @@ add_action('wp_ajax_vei_delete_all_exhibits', function() {
     }
     wp_send_json_success(['message' => "Deleted $deleted Virtual Exhibit posts."]);
 });
+
+add_action('add_meta_boxes', 'vei_register_original_url_metabox');
+
+function vei_register_original_url_metabox() {
+    add_meta_box(
+        'vei-original-url',
+        __('Original URL', 'virtual-exhibit-importer'),
+        'vei_render_original_url_metabox',
+        'virtual_exhibit',
+        'side',
+        'default'
+    );
+}
+
+function vei_render_original_url_metabox($post) {
+    $original_url = get_post_meta($post->ID, 'original_url', true);
+    if (!$original_url) {
+        echo '<p>' . esc_html__('No original URL stored for this exhibit.', 'virtual-exhibit-importer') . '</p>';
+        return;
+    }
+
+    $escaped_url = esc_url($original_url);
+    echo '<p>' . esc_html__('This URL is provided for reference and cannot be modified.', 'virtual-exhibit-importer') . '</p>';
+    echo '<p><a href="' . $escaped_url . '" target="_blank" rel="noopener noreferrer">' . $escaped_url . '</a></p>';
+    echo '<input type="text" class="widefat" readonly value="' . esc_attr($original_url) . '" />';
+}
