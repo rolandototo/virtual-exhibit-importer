@@ -53,7 +53,9 @@ add_action('wp_ajax_vei_start_import_step', 'vei_ajax_start_import');
 function vei_ajax_start_import() {
     check_ajax_referer('vei_nonce', 'nonce');
     $step = isset($_POST['step']) ? sanitize_text_field($_POST['step']) : 'count';
-    $force = !empty($_POST['force']);
+    // jQuery sends booleans as the strings "true"/"false", so parse the value
+    // instead of using empty(), which treats "false" as true.
+    $force = isset($_POST['force']) && filter_var(wp_unslash($_POST['force']), FILTER_VALIDATE_BOOLEAN);
 
     if ($step === 'count') {
         $response = wp_remote_get('https://virtualexhibits.louisarmstronghouse.org/wp-json/wp/v2/posts?per_page=1');

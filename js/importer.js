@@ -13,7 +13,7 @@ jQuery(document).ready(function($) {
             nonce: vei_ajax.nonce,
             step: 'import',
             page: current,
-            force: force
+            force: force ? 1 : 0
         }, function(response) {
             if (response.success) {
                 $('#vei-status').append('<br>' + response.data.message);
