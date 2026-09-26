@@ -120,8 +120,9 @@ jQuery(document).ready(function($) {
             }
         });
     });
-});
 
+    // Must stay inside the ready wrapper: in wp-admin jQuery runs in
+    // noConflict mode, so $ is only defined here.
     $('#delete-all').on('click', function() {
         if (!confirm('Are you sure you want to delete ALL Virtual Exhibits? This cannot be undone.')) return;
         $('#vei-status').html('<strong>Deleting all virtual_exhibit posts...</strong>');
@@ -136,3 +137,4 @@ jQuery(document).ready(function($) {
             }
         });
     });
+});
