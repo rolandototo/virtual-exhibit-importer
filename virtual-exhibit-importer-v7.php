@@ -94,7 +94,7 @@ add_action('wp_ajax_vei_start_import_step', 'vei_ajax_start_import');
 function vei_ajax_start_import() {
     check_ajax_referer('vei_nonce', 'nonce');
     vei_require_admin();
-    $step = isset($_POST['step']) ? sanitize_text_field($_POST['step']) : 'count';
+    $step = isset($_POST['step']) ? sanitize_key(wp_unslash($_POST['step'])) : 'count';
     // jQuery sends booleans as the strings "true"/"false", so parse the value
     // instead of using empty(), which treats "false" as true.
     $force = isset($_POST['force']) && filter_var(wp_unslash($_POST['force']), FILTER_VALIDATE_BOOLEAN);
@@ -232,7 +232,7 @@ function vei_ajax_start_import() {
                         if (!is_wp_error($id)) {
                             set_post_thumbnail($new_post, $id);
                         } else {
-                            @unlink($file_array['tmp_name']);
+                            wp_delete_file($file_array['tmp_name']);
                         }
                     }
                 }
@@ -289,8 +289,7 @@ function vei_render_original_url_metabox($post) {
         return;
     }
 
-    $escaped_url = esc_url($original_url);
     echo '<p>' . esc_html__('This URL is provided for reference and cannot be modified.', 'virtual-exhibit-importer') . '</p>';
-    echo '<p><a href="' . $escaped_url . '" target="_blank" rel="noopener noreferrer">' . $escaped_url . '</a></p>';
+    echo '<p><a href="' . esc_url($original_url) . '" target="_blank" rel="noopener noreferrer">' . esc_html($original_url) . '</a></p>';
     echo '<input type="text" class="widefat" readonly value="' . esc_attr($original_url) . '" />';
 }
