@@ -48,10 +48,21 @@ function vei_importer_admin_page() {
     <?php
 }
 
+/**
+ * Stops an AJAX request unless the user can manage options, the same
+ * capability the admin page requires. The nonce alone doesn't prove that.
+ */
+function vei_require_admin() {
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error(['message' => 'You are not allowed to run the importer.'], 403);
+    }
+}
+
 add_action('wp_ajax_vei_start_import_step', 'vei_ajax_start_import');
 
 function vei_ajax_start_import() {
     check_ajax_referer('vei_nonce', 'nonce');
+    vei_require_admin();
     $step = isset($_POST['step']) ? sanitize_text_field($_POST['step']) : 'count';
     // jQuery sends booleans as the strings "true"/"false", so parse the value
     // instead of using empty(), which treats "false" as true.
@@ -205,6 +216,7 @@ function vei_ajax_start_import() {
 
 add_action('wp_ajax_vei_delete_all_exhibits', function() {
     check_ajax_referer('vei_nonce', 'nonce');
+    vei_require_admin();
     $deleted = 0;
     $posts = get_posts([
         'post_type' => 'virtual_exhibit',
