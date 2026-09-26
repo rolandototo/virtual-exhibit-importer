@@ -8,6 +8,24 @@
 
 if (!defined('ABSPATH')) exit;
 
+/**
+ * Base URL of the WordPress site to import from.
+ *
+ * To import from another site, define VEI_SOURCE_URL in wp-config.php or
+ * use the vei_source_url filter.
+ */
+function vei_source_url() {
+    $url = defined('VEI_SOURCE_URL') ? VEI_SOURCE_URL : 'https://virtualexhibits.louisarmstronghouse.org';
+    return untrailingslashit(apply_filters('vei_source_url', $url));
+}
+
+/**
+ * URL of the source site's posts endpoint with the given query arguments.
+ */
+function vei_posts_endpoint(array $args) {
+    return add_query_arg($args, vei_source_url() . '/wp-json/wp/v2/posts');
+}
+
 // Enqueue scripts and styles
 add_action('admin_enqueue_scripts', function($hook) {
     if ($hook !== 'toplevel_page_virtual_exhibit_importer_v7') return;
@@ -36,6 +54,7 @@ function vei_importer_admin_page() {
     ?>
     <div class="wrap">
         <h1>Virtual Exhibit Importer v7</h1>
+        <p>Source site: <code><?php echo esc_html(vei_source_url()); ?></code></p>
         <button id="start-import" class="button button-primary">Start Import</button>
         <button id="force-import" class="button button-secondary">Force Reimport</button>
     <button id="delete-all" class="button button-danger" style="background:#b32d2e;border-color:#b32d2e;">Delete All Exhibits</button>
@@ -69,7 +88,7 @@ function vei_ajax_start_import() {
     $force = isset($_POST['force']) && filter_var(wp_unslash($_POST['force']), FILTER_VALIDATE_BOOLEAN);
 
     if ($step === 'count') {
-        $response = wp_remote_get('https://virtualexhibits.louisarmstronghouse.org/wp-json/wp/v2/posts?per_page=1');
+        $response = wp_remote_get(vei_posts_endpoint(['per_page' => 1]));
         if (is_wp_error($response)) {
             wp_send_json_error(['message' => 'API request failed', 'error' => $response->get_error_message()]);
         }
@@ -98,7 +117,7 @@ function vei_ajax_start_import() {
 
     if ($step === 'import') {
         $page = isset($_POST['page']) ? intval($_POST['page']) : 1;
-        $response = wp_remote_get("https://virtualexhibits.louisarmstronghouse.org/wp-json/wp/v2/posts?per_page=1&page=$page");
+        $response = wp_remote_get(vei_posts_endpoint(['per_page' => 1, 'page' => $page]));
         if (is_wp_error($response)) {
             wp_send_json_error(['message' => 'API error during import', 'error' => $response->get_error_message()]);
         }
