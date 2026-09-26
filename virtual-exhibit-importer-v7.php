@@ -1,12 +1,24 @@
 <?php
 /**
- * Plugin Name: Virtual Exhibit Importer v7
- * Description: Imports Virtual Exhibits from external API with AJAX, progress bar, and error reporting.
- * Version: 7.0
- * Author: Counterintuity/Rolando Escobar
+ * Plugin Name:       Virtual Exhibit Importer
+ * Plugin URI:        https://github.com/rolandototo/virtual-exhibit-importer
+ * Description:       Imports posts from a remote WordPress REST API into the virtual_exhibit post type, with featured images, a progress bar and a downloadable report.
+ * Version:           7.1.0
+ * Requires at least: 6.0
+ * Requires PHP:      7.4
+ * Author:            Rolando Escobar
+ * Author URI:        https://rolandowp.com
+ * Text Domain:       virtual-exhibit-importer
+ *
+ * Built at Counterintuity for the Louis Armstrong House Museum.
+ *
+ * The main file keeps its original name (virtual-exhibit-importer-v7.php):
+ * renaming it would deactivate the plugin on sites that already run it.
  */
 
 if (!defined('ABSPATH')) exit;
+
+define('VEI_VERSION', '7.1.0');
 
 /**
  * Base URL of the WordPress site to import from.
@@ -29,8 +41,8 @@ function vei_posts_endpoint(array $args) {
 // Enqueue scripts and styles
 add_action('admin_enqueue_scripts', function($hook) {
     if ($hook !== 'toplevel_page_virtual_exhibit_importer_v7') return;
-    wp_enqueue_style('vei-admin-style', plugin_dir_url(__FILE__) . 'css/admin-style.css');
-    wp_enqueue_script('vei-importer', plugin_dir_url(__FILE__) . 'js/importer.js', ['jquery'], null, true);
+    wp_enqueue_style('vei-admin-style', plugin_dir_url(__FILE__) . 'css/admin-style.css', [], VEI_VERSION);
+    wp_enqueue_script('vei-importer', plugin_dir_url(__FILE__) . 'js/importer.js', ['jquery'], VEI_VERSION, true);
     wp_localize_script('vei-importer', 'vei_ajax', [
         'ajax_url' => admin_url('admin-ajax.php'),
         'nonce'    => wp_create_nonce('vei_nonce')
@@ -53,11 +65,11 @@ add_action('admin_menu', function() {
 function vei_importer_admin_page() {
     ?>
     <div class="wrap">
-        <h1>Virtual Exhibit Importer v7</h1>
+        <h1>Virtual Exhibit Importer</h1>
         <p>Source site: <code><?php echo esc_html(vei_source_url()); ?></code></p>
         <button id="start-import" class="button button-primary">Start Import</button>
         <button id="force-import" class="button button-secondary">Force Reimport</button>
-    <button id="delete-all" class="button button-danger" style="background:#b32d2e;border-color:#b32d2e;">Delete All Exhibits</button>
+        <button id="delete-all" class="button button-danger" style="background:#b32d2e;border-color:#b32d2e;">Delete All Exhibits</button>
         <div id="vei-status" style="margin-top:10px;"></div>
         <div id="vei-progress-bar"><div></div></div>
         <div id="vei-summary" style="margin-top:10px;"></div>
@@ -123,7 +135,8 @@ function vei_ajax_start_import() {
         }
         $body = wp_remote_retrieve_body($response);
         $posts = json_decode($body);
-        if (empty($posts)) {
+        // A page past the end, or any API error, returns an error object instead of a list.
+        if (wp_remote_retrieve_response_code($response) !== 200 || !is_array($posts) || empty($posts)) {
             wp_send_json_error(['message' => 'No more posts to import.']);
         }
 
@@ -132,14 +145,17 @@ function vei_ajax_start_import() {
         $original_url = !empty($post->link) ? esc_url_raw($post->link) : '';
         $title = sanitize_text_field($post->title->rendered);
         $content = wp_kses_post($post->content->rendered);
-        $slug = sanitize_title($title);
+        // Keep the source slug so URLs match; fall back to the title.
+        $slug = !empty($post->slug) ? sanitize_title($post->slug) : sanitize_title($title);
         $excerpt = wp_kses_post($post->excerpt->rendered);
 
         $existing_query = new WP_Query([
             'post_type' => 'virtual_exhibit',
+            'post_status' => ['any', 'trash'],
             'meta_key' => 'original_id',
             'meta_value' => $original_id,
-            'posts_per_page' => 1
+            'posts_per_page' => 1,
+            'no_found_rows' => true
         ]);
         $existing = $existing_query->have_posts() ? $existing_query->posts[0] : null;
         if ($existing && !$force) {
@@ -158,16 +174,15 @@ function vei_ajax_start_import() {
         }
 
         if ($existing && $force) {
-            wp_update_post([
+            $new_post = wp_update_post([
                 'ID' => $existing->ID,
                 'post_title' => $title,
                 'post_content' => $content,
                 'post_excerpt' => $excerpt,
-            ]);
-            if ($original_url) {
+            ], true);
+            if ($original_url && !is_wp_error($new_post)) {
                 update_post_meta($existing->ID, 'original_url', $original_url);
             }
-            $new_post = $existing->ID;
             $status = 'updated';
         } else {
             require_once(ABSPATH . 'wp-admin/includes/image.php');
@@ -216,6 +231,8 @@ function vei_ajax_start_import() {
                         $id = media_handle_sideload($file_array, $new_post);
                         if (!is_wp_error($id)) {
                             set_post_thumbnail($new_post, $id);
+                        } else {
+                            @unlink($file_array['tmp_name']);
                         }
                     }
                 }
@@ -237,13 +254,15 @@ add_action('wp_ajax_vei_delete_all_exhibits', function() {
     check_ajax_referer('vei_nonce', 'nonce');
     vei_require_admin();
     $deleted = 0;
-    $posts = get_posts([
+    // 'any' leaves out trashed posts, so ask for the trash explicitly.
+    $post_ids = get_posts([
         'post_type' => 'virtual_exhibit',
-        'post_status' => 'any',
-        'numberposts' => -1
+        'post_status' => ['any', 'trash'],
+        'numberposts' => -1,
+        'fields' => 'ids'
     ]);
-    foreach ($posts as $post) {
-        if (wp_delete_post($post->ID, true)) {
+    foreach ($post_ids as $post_id) {
+        if (wp_delete_post($post_id, true)) {
             $deleted++;
         }
     }
