@@ -1,5 +1,6 @@
 jQuery(document).ready(function($) {
     let importLog = [];
+    let counts = { imported: 0, skipped: 0, updated: 0, failed: 0 };
 
     function importPosts(total, current, force = false) {
         if (current > total) {
@@ -18,7 +19,11 @@ jQuery(document).ready(function($) {
             if (response.success) {
                 $('#vei-status').append('<br>' + response.data.message);
                 importLog.push("✔️ " + response.data.message);
+                if (counts.hasOwnProperty(response.data.status)) {
+                    counts[response.data.status]++;
+                }
             } else {
+                counts.failed++;
                 const errMsg = '❌ Page ' + current + ': ' + response.data.message;
                 $('#vei-status').append('<br><span style="color:red;">' + errMsg + '</span>');
                 importLog.push(errMsg);
@@ -37,15 +42,10 @@ jQuery(document).ready(function($) {
 
     function showFinalSummary(log) {
         let summary = "<h3>📋 Import Summary</h3><ul>";
-        let imported = log.filter(l => l.includes("✔️ Imported")).length;
-        let skipped = log.filter(l => l.includes("✔️ Post already exists")).length;
-        let updated = log.filter(l => l.includes("Updated post")).length;
-        let failed = log.filter(l => l.includes("❌")).length;
-
-        summary += `<li>✅ Imported: ${imported}</li>`;
-        summary += `<li>🔁 Already existed: ${skipped}</li>`;
-        summary += `<li>🛠 Updated: ${updated}</li>`;
-        summary += `<li>❌ Errors: ${failed}</li>`;
+        summary += `<li>✅ Imported: ${counts.imported}</li>`;
+        summary += `<li>🔁 Already existed: ${counts.skipped}</li>`;
+        summary += `<li>🛠 Updated: ${counts.updated}</li>`;
+        summary += `<li>❌ Errors: ${counts.failed}</li>`;
         summary += "</ul>";
 
         $('#vei-summary').html(summary);
@@ -66,6 +66,7 @@ jQuery(document).ready(function($) {
         $('#vei-error-log').hide().html('');
         $('#download-log').hide();
         importLog = [];
+        counts = { imported: 0, skipped: 0, updated: 0, failed: 0 };
 
         $.post(vei_ajax.ajax_url, {
             action: 'vei_start_import_step',
@@ -97,6 +98,7 @@ jQuery(document).ready(function($) {
         $('#vei-error-log').hide().html('');
         $('#download-log').hide();
         importLog = [];
+        counts = { imported: 0, skipped: 0, updated: 0, failed: 0 };
 
         $.post(vei_ajax.ajax_url, {
             action: 'vei_start_import_step',

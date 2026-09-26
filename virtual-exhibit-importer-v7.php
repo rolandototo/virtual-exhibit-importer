@@ -121,6 +121,7 @@ function vei_ajax_start_import() {
             }
             wp_send_json_success([
                 'message' => "Post already exists: $title",
+                'status' => 'skipped',
                 'imported' => false,
                 'title' => $title
             ]);
@@ -137,6 +138,7 @@ function vei_ajax_start_import() {
                 update_post_meta($existing->ID, 'original_url', $original_url);
             }
             $new_post = $existing->ID;
+            $status = 'updated';
         } else {
             require_once(ABSPATH . 'wp-admin/includes/image.php');
             require_once(ABSPATH . 'wp-admin/includes/file.php');
@@ -155,6 +157,7 @@ function vei_ajax_start_import() {
                 'post_name' => $slug,
                 'meta_input' => $meta_input
             ]);
+            $status = 'imported';
         }
 
         if (is_wp_error($new_post)) {
@@ -190,7 +193,8 @@ function vei_ajax_start_import() {
         }
 
         wp_send_json_success([
-            'message' => ($force ? "Force updated post: $title" : "Imported post: $title"),
+            'message' => ($status === 'updated' ? "Updated post: $title" : "Imported post: $title"),
+            'status' => $status,
             'imported' => true,
             'title' => $title,
             'page' => $page
