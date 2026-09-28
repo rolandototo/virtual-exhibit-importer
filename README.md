@@ -105,6 +105,7 @@ The source site URL is stored in the `vei_source_url` option.
 - Until a source site is set, the importer screen shows a notice and the import doesn't run.
 - The source URL is validated: `http` and `https` only, reduced to scheme, host, port and path.
 - Precedence is now `VEI_SOURCE_URL`, then the `vei_source_url` filter, then the saved field. When the constant is defined, the filter no longer changes it.
+- Featured media details are requested with `wp_safe_remote_get()`, like the image download.
 
 ### 7.1.0
 

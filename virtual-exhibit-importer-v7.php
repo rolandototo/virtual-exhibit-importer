@@ -311,7 +311,9 @@ function vei_ajax_start_import() {
         }
         if (!has_post_thumbnail($new_post) && !empty($post->_links->{'wp:featuredmedia'}[0]->href)) {
             $media_link = esc_url_raw($post->_links->{'wp:featuredmedia'}[0]->href);
-            $media_response = wp_remote_get($media_link);
+            // The media link comes from the source site's response, so use the
+            // same safe request as download_url() does for the image itself.
+            $media_response = wp_safe_remote_get($media_link);
             if (!is_wp_error($media_response)) {
                 $media_body = wp_remote_retrieve_body($media_response);
                 $media_obj = json_decode($media_body);
