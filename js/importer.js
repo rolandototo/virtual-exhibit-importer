@@ -2,7 +2,8 @@ jQuery(document).ready(function($) {
     // In wp-admin jQuery runs in noConflict mode, so every handler that
     // uses $ must stay inside this ready wrapper.
     const $status = $('#vei-status');
-    const $buttons = $('#start-import, #force-import, #delete-all');
+    // Buttons the page renders disabled (no source site set) stay disabled.
+    const $buttons = $('#start-import, #force-import, #delete-all').not(':disabled');
     let importLog = [];
     let counts = { imported: 0, skipped: 0, updated: 0, failed: 0 };
 

@@ -2,15 +2,15 @@
 
 A WordPress admin tool that imports posts from a remote WordPress site's REST API into a local `virtual_exhibit` custom post type, with excerpts and featured images. It shows a progress bar and offers a downloadable report.
 
-It was built for the [Louis Armstrong House Museum](https://rolandowp.com/project/louis-armstrong-house/). It brings the posts from the museum's separate Virtual Exhibits site (`virtualexhibits.louisarmstronghouse.org`) into its main site, so the team doesn't have to copy them by hand.
+Use it when content lives on a separate WordPress site (for example, a microsite) and needs to be brought into a main site, so nobody has to copy the posts by hand.
 
-![Version](https://img.shields.io/badge/version-7.1.0-blue)
+![Version](https://img.shields.io/badge/version-7.2.0-blue)
 ![WordPress](https://img.shields.io/badge/WordPress-6.0%2B-21759b)
 ![PHP](https://img.shields.io/badge/PHP-7.4%2B-777bb4)
 
 ## Features
 
-- **Admin screen:** a top-level **Exhibit Importer** menu with three buttons: **Start Import**, **Force Reimport** and **Delete All Exhibits**. It shows which source site it imports from.
+- **Admin screen:** a top-level **Exhibit Importer** menu with a **Source site** field and three buttons: **Start Import**, **Force Reimport** and **Delete All Exhibits**. It shows which source site it imports from.
 - **Step-by-step AJAX import:** the importer reads the total from the source's `X-WP-Total` header, then imports one remote post per request. The import runs as many short requests instead of one long one, so it doesn't hit PHP time limits.
 - **Duplicate detection:** each imported post stores the source post ID in the `original_id` meta. Posts that already exist, including trashed ones, are skipped.
 - **Force reimport:** overwrites the title, content and excerpt of posts that already exist.
@@ -28,7 +28,7 @@ It was built for the [Louis Armstrong House Museum](https://rolandowp.com/projec
 - A **`virtual_exhibit` post type registered by your theme or another plugin**. This plugin doesn't register it.
 - A user with the `manage_options` capability (administrators).
 - The server must be able to make outbound HTTP requests to the source site.
-- The source site must expose the standard WordPress REST API (`/wp-json/wp/v2/posts`) publicly.
+- The source site must expose the standard WordPress REST API (`/wp-json/wp/v2/posts`) publicly, and its URL must be set (see [Setting the source site](#setting-the-source-site)).
 
 ## Installation
 
@@ -40,29 +40,38 @@ Or clone it into `wp-content/plugins/`.
 ## Usage
 
 1. Open **Exhibit Importer** in the admin menu.
-2. Click one of the buttons:
+2. If no source site is set yet, enter its URL in **Source site** and click **Save Source Site** (see [Setting the source site](#setting-the-source-site)).
+3. Click one of the buttons:
    - **Start Import:** counts the remote posts and the local exhibits, then imports the remote posts one at a time. Posts that already exist (matched by `original_id`) are skipped; only their `original_url` is refreshed.
    - **Force Reimport:** runs the same process, but overwrites the title, content and excerpt of posts that already exist.
    - **Delete All Exhibits:** permanently deletes all `virtual_exhibit` posts. This can't be undone.
-3. When the import finishes, review the summary and click **Download Report** if you need a copy of the log.
+4. When the import finishes, review the summary and click **Download Report** if you need a copy of the log.
 
 New posts are created as **published**, with the same slug as on the source site.
 
-## Using another source site
+## Setting the source site
 
-The default source is the Louis Armstrong House Virtual Exhibits site. To import from another WordPress site, set the base URL in `wp-config.php`:
+There is no default source site. Until one is set, the importer screen shows a notice, the import buttons are disabled and the import AJAX handler refuses to run.
 
-```php
-define( 'VEI_SOURCE_URL', 'https://example.org' );
-```
+Set the base URL of the WordPress site to import from in one of three ways. When more than one is set, the first one in this list wins:
 
-Or use the `vei_source_url` filter:
+1. The `VEI_SOURCE_URL` constant in `wp-config.php`. The **Source site** field is then read-only.
 
-```php
-add_filter( 'vei_source_url', function () {
-    return 'https://example.org';
-} );
-```
+   ```php
+   define( 'VEI_SOURCE_URL', 'https://example.org' );
+   ```
+
+2. The `vei_source_url` filter. It receives the saved field value (or an empty string).
+
+   ```php
+   add_filter( 'vei_source_url', function () {
+       return 'https://example.org';
+   } );
+   ```
+
+3. The **Source site** field on the importer screen, saved in the `vei_source_url` option.
+
+Only `http` and `https` URLs are accepted. The URL is reduced to its scheme, host, port and path, without a trailing slash; a path is fine if WordPress runs in a subdirectory. An invalid value in the field is rejected and the previous one is kept.
 
 ## Stored data
 
@@ -73,9 +82,12 @@ add_filter( 'vei_source_url', function () {
 
 Imported featured images are attached to the post they belong to.
 
+The source site URL is stored in the `vei_source_url` option.
+
 ## Technical notes
 
 - AJAX actions: `vei_start_import_step` (steps `count`, `compare` and `import`) and `vei_delete_all_exhibits`. Both check the nonce `vei_nonce` and the `manage_options` capability.
+- The **Source site** field uses the Settings API (option group `vei_settings`), so saving it goes through `options.php` with its nonce and the `manage_options` capability.
 - Each import step returns a `status` (`imported`, `skipped` or `updated`), which the summary counts.
 - The admin CSS and JS load only on the importer's own screen.
 
@@ -86,6 +98,13 @@ Imported featured images are attached to the post they belong to.
 - The admin interface is in English only.
 
 ## Changelog
+
+### 7.2.0
+
+- The plugin no longer has a built-in source site. Set it in the new **Source site** field on the importer screen, with `VEI_SOURCE_URL` or with the `vei_source_url` filter. **Sites upgrading from 7.1.0 that relied on the built-in default must set the source site before importing again.**
+- Until a source site is set, the importer screen shows a notice and the import doesn't run.
+- The source URL is validated: `http` and `https` only, reduced to scheme, host, port and path.
+- Precedence is now `VEI_SOURCE_URL`, then the `vei_source_url` filter, then the saved field. When the constant is defined, the filter no longer changes it.
 
 ### 7.1.0
 
@@ -103,7 +122,7 @@ The main file is still named `virtual-exhibit-importer-v7.php`, because renaming
 ## File structure
 
 ```text
-virtual-exhibit-importer-v7.php   Main plugin file (admin page, AJAX import/delete, meta box)
+virtual-exhibit-importer-v7.php   Main plugin file (admin page, source site setting, AJAX import/delete, meta box)
 js/importer.js                    Import flow, progress bar, summary and report download
 css/admin-style.css               Progress bar styles
 ```
@@ -111,8 +130,8 @@ css/admin-style.css               Progress bar styles
 ## Author
 
 **Rolando Escobar**, WordPress developer. [rolandowp.com](https://rolandowp.com)
-Built at Counterintuity for the Louis Armstrong House Museum.
+Built at Counterintuity.
 
 ## License
 
-No open-source license is granted. This plugin was built for the Louis Armstrong House Museum and is shared here as a work sample.
+No open-source license is granted. This plugin was built for a client project and is shared here as a work sample.

@@ -3,14 +3,14 @@
  * Plugin Name:       Virtual Exhibit Importer
  * Plugin URI:        https://github.com/rolandototo/virtual-exhibit-importer
  * Description:       Imports posts from a remote WordPress REST API into the virtual_exhibit post type, with featured images, a progress bar and a downloadable report.
- * Version:           7.1.0
+ * Version:           7.2.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            Rolando Escobar
  * Author URI:        https://rolandowp.com
  * Text Domain:       virtual-exhibit-importer
  *
- * Built at Counterintuity for the Louis Armstrong House Museum.
+ * Built at Counterintuity.
  *
  * The main file keeps its original name (virtual-exhibit-importer-v7.php):
  * renaming it would deactivate the plugin on sites that already run it.
@@ -18,18 +18,75 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('VEI_VERSION', '7.1.0');
+define('VEI_VERSION', '7.2.0');
 
 /**
- * Base URL of the WordPress site to import from.
+ * Base URL of the WordPress site to import from, without a trailing slash,
+ * or an empty string when no source site is set.
  *
- * To import from another site, define VEI_SOURCE_URL in wp-config.php or
- * use the vei_source_url filter.
+ * In order of precedence: the VEI_SOURCE_URL constant in wp-config.php, the
+ * vei_source_url filter, then the Source site field on the importer screen
+ * (stored in the vei_source_url option). There is no built-in default.
  */
 function vei_source_url() {
-    $url = defined('VEI_SOURCE_URL') ? VEI_SOURCE_URL : 'https://virtualexhibits.louisarmstronghouse.org';
-    return untrailingslashit(apply_filters('vei_source_url', $url));
+    if (defined('VEI_SOURCE_URL') && VEI_SOURCE_URL) {
+        $url = VEI_SOURCE_URL;
+    } else {
+        $url = apply_filters('vei_source_url', get_option('vei_source_url', ''));
+    }
+    return vei_clean_source_url($url);
 }
+
+/**
+ * Normalizes a source site URL. Only http and https are accepted, and only
+ * the scheme, host, port and path are kept. Returns an empty string if the
+ * value isn't a valid URL.
+ */
+function vei_clean_source_url($url) {
+    if (!is_string($url) || trim($url) === '') {
+        return '';
+    }
+    $url = esc_url_raw(trim($url), ['http', 'https']);
+    $parts = $url ? wp_parse_url($url) : false;
+    if (!is_array($parts) || empty($parts['scheme']) || empty($parts['host'])) {
+        return '';
+    }
+    $clean = strtolower($parts['scheme']) . '://' . $parts['host'];
+    if (!empty($parts['port'])) {
+        $clean .= ':' . $parts['port'];
+    }
+    if (!empty($parts['path'])) {
+        $clean .= $parts['path'];
+    }
+    return untrailingslashit($clean);
+}
+
+/**
+ * Sanitizes the Source site field. An invalid URL keeps the saved value
+ * and shows an error; an empty field clears it.
+ */
+function vei_sanitize_source_url_option($value) {
+    $url = vei_clean_source_url($value);
+    if ($url === '' && is_string($value) && trim($value) !== '') {
+        if (function_exists('add_settings_error')) {
+            add_settings_error(
+                'vei_source_url',
+                'vei_source_url_invalid',
+                __('The source site must be a valid http:// or https:// URL.', 'virtual-exhibit-importer')
+            );
+        }
+        return get_option('vei_source_url', '');
+    }
+    return $url;
+}
+
+add_action('admin_init', function() {
+    register_setting('vei_settings', 'vei_source_url', [
+        'type'              => 'string',
+        'sanitize_callback' => 'vei_sanitize_source_url_option',
+        'default'           => '',
+    ]);
+});
 
 /**
  * URL of the source site's posts endpoint with the given query arguments.
@@ -63,12 +120,50 @@ add_action('admin_menu', function() {
 });
 
 function vei_importer_admin_page() {
+    $source_url = vei_source_url();
+    $saved_url  = get_option('vei_source_url', '');
+    $from_constant = defined('VEI_SOURCE_URL') && VEI_SOURCE_URL;
     ?>
     <div class="wrap">
         <h1>Virtual Exhibit Importer</h1>
-        <p>Source site: <code><?php echo esc_html(vei_source_url()); ?></code></p>
-        <button id="start-import" class="button button-primary">Start Import</button>
-        <button id="force-import" class="button button-secondary">Force Reimport</button>
+        <?php settings_errors(); ?>
+        <?php if ($source_url === '') : ?>
+            <div class="notice notice-warning inline">
+                <p><?php esc_html_e('No source site is set, so the importer can\'t run yet. Enter the URL of the WordPress site to import from in the Source site field below and save it, or define VEI_SOURCE_URL in wp-config.php.', 'virtual-exhibit-importer'); ?></p>
+            </div>
+        <?php endif; ?>
+        <form method="post" action="options.php">
+            <?php settings_fields('vei_settings'); ?>
+            <table class="form-table" role="presentation">
+                <tr>
+                    <th scope="row"><label for="vei-source-url"><?php esc_html_e('Source site', 'virtual-exhibit-importer'); ?></label></th>
+                    <td>
+                        <input type="url" id="vei-source-url" name="vei_source_url" class="regular-text code" value="<?php echo esc_attr($from_constant ? $source_url : $saved_url); ?>" placeholder="https://example.org" <?php disabled($from_constant); ?> />
+                        <p class="description">
+                            <?php
+                            if ($from_constant) {
+                                esc_html_e('Set by the VEI_SOURCE_URL constant in wp-config.php, which takes precedence over this field.', 'virtual-exhibit-importer');
+                            } elseif ($source_url !== vei_clean_source_url($saved_url)) {
+                                esc_html_e('The vei_source_url filter overrides this field.', 'virtual-exhibit-importer');
+                            } else {
+                                esc_html_e('Base URL of the WordPress site to import posts from (http or https). Its REST API must be public at /wp-json/wp/v2/posts.', 'virtual-exhibit-importer');
+                            }
+                            ?>
+                        </p>
+                    </td>
+                </tr>
+            </table>
+            <?php
+            if (!$from_constant) {
+                submit_button(__('Save Source Site', 'virtual-exhibit-importer'));
+            }
+            ?>
+        </form>
+        <?php if ($source_url !== '') : ?>
+            <p>Source site: <code><?php echo esc_html($source_url); ?></code></p>
+        <?php endif; ?>
+        <button id="start-import" class="button button-primary" <?php disabled($source_url === ''); ?>>Start Import</button>
+        <button id="force-import" class="button button-secondary" <?php disabled($source_url === ''); ?>>Force Reimport</button>
         <button id="delete-all" class="button button-danger" style="background:#b32d2e;border-color:#b32d2e;">Delete All Exhibits</button>
         <div id="vei-status" style="margin-top:10px;"></div>
         <div id="vei-progress-bar"><div></div></div>
@@ -94,6 +189,9 @@ add_action('wp_ajax_vei_start_import_step', 'vei_ajax_start_import');
 function vei_ajax_start_import() {
     check_ajax_referer('vei_nonce', 'nonce');
     vei_require_admin();
+    if (vei_source_url() === '') {
+        wp_send_json_error(['message' => __('No source site is set. Set it on the importer screen or define VEI_SOURCE_URL in wp-config.php.', 'virtual-exhibit-importer')]);
+    }
     $step = isset($_POST['step']) ? sanitize_key(wp_unslash($_POST['step'])) : 'count';
     // jQuery sends booleans as the strings "true"/"false", so parse the value
     // instead of using empty(), which treats "false" as true.
